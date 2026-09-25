@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>海外債利差試算 — 借錢買債到底划不划算</title>
+<meta name="description" content="用玉山銀行每日海外債券參考報價，試算以信用貸款買進海外債的實質利差、現金流與匯率損益平衡點。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar__brand">
+    <h1>海外債利差試算</h1>
+    <p>借台幣、買外幣債，利差撐得住嗎</p>
+  </div>
+  <dl class="topbar__meta" id="meta">
+    <div><dt>報價來源</dt><dd>玉山銀行</dd></div>
+    <div><dt>資料更新</dt><dd id="metaTime">載入中</dd></div>
+    <div><dt>債券檔數</dt><dd id="metaCount">—</dd></div>
+  </dl>
+</header>
+
+<main class="shell">
+
+  <!-- ============ 左側控制台 ============ -->
+  <aside class="console" id="console">
+    <button class="console__toggle" id="consoleToggle" aria-expanded="false" aria-controls="consoleBody">
+      調整條件
+    </button>
+
+    <div class="console__body" id="consoleBody">
+
+      <section class="fieldset">
+        <h2>你的貸款</h2>
+        <label class="field">
+          <span>貸款金額</span>
+          <span class="field__input"><input type="number" id="loanAmount" value="1000000" step="100000" min="0"><em>元</em></span>
+        </label>
+        <label class="field">
+          <span>年利率</span>
+          <span class="field__input"><input type="number" id="loanRate" value="3.5" step="0.05" min="0"><em>%</em></span>
+        </label>
+        <label class="field">
+          <span>貸款年限</span>
+          <span class="field__input"><input type="number" id="loanYears" value="7" step="1" min="1" max="30"><em>年</em></span>
+        </label>
+        <label class="field">
+          <span>開辦費</span>
+          <span class="field__input"><input type="number" id="loanFee" value="6000" step="1000" min="0"><em>元</em></span>
+        </label>
+        <fieldset class="radios">
+          <legend>還款方式</legend>
+          <label><input type="radio" name="repay" value="amortizing" checked><span>本息均攤</span></label>
+          <label><input type="radio" name="repay" value="interest"><span>只繳息、到期還本</span></label>
+        </fieldset>
+        <p class="readout" id="loanReadout"></p>
+      </section>
+
+      <section class="fieldset">
+        <h2>換匯與稅</h2>
+        <label class="field">
+          <span>換匯匯率</span>
+          <span class="field__input"><input type="number" id="fxRate" value="32" step="0.01" min="0.01"><em id="fxUnit">TWD/USD</em></span>
+        </label>
+        <p class="hint">預設值僅供試算，請改成你實際換匯的牌告價。<a href="https://www.esunbank.com/zh-tw/personal/deposit/rate/forex/foreign-exchange-rates" target="_blank" rel="noopener">查玉山牌告匯率</a></p>
+        <label class="field">
+          <span>換匯來回成本</span>
+          <span class="field__input"><input type="number" id="fxCost" value="0.6" step="0.1" min="0"><em>%</em></span>
+        </label>
+        <label class="field">
+          <span>海外所得稅率</span>
+          <span class="field__input"><input type="number" id="taxRate" value="0" step="1" min="0" max="45"><em>%</em></span>
+        </label>
+        <p class="hint">海外所得全年未達 100 萬通常不計入基本所得額，多數小額投資人填 0 即可。金額大請自行確認最低稅負制。</p>
+      </section>
+
+      <section class="fieldset">
+        <h2>壓力測試</h2>
+        <label class="slider">
+          <span>持有期間匯率變動</span>
+          <input type="range" id="fxChange" min="-30" max="30" value="0" step="1">
+          <output id="fxChangeOut">0%</output>
+        </label>
+        <p class="hint">負值代表外幣對台幣貶值，也就是你換回台幣時變少。</p>
+        <label class="slider">
+          <span>賣出時殖利率變動</span>
+          <input type="range" id="rateShock" min="-300" max="300" value="0" step="10">
+          <output id="rateShockOut">0 bp</output>
+        </label>
+        <p class="hint">只在「貸款到期時債券還沒到期、必須賣出」的情況下才有影響。</p>
+      </section>
+
+      <section class="fieldset">
+        <h2>篩選</h2>
+        <label class="check"><input type="checkbox" id="fOpen" checked><span>只看開放申購</span></label>
+        <label class="check"><input type="checkbox" id="fRetail" checked><span>只看一般投資人可買</span></label>
+        <label class="check"><input type="checkbox" id="fFresh" checked><span>只看 30 天內的報價</span></label>
+        <label class="check"><input type="checkbox" id="fFit" checked><span>只看到期日在貸款年限內</span></label>
+        <div class="ccy" id="ccyFilter"></div>
+      </section>
+
+    </div>
+  </aside>
+
+  <!-- ============ 右側內容 ============ -->
+  <div class="content">
+
+    <!-- 英雄圖：殖利率 vs 年期，含資金成本線 -->
+    <section class="panel">
+      <div class="panel__head">
+        <h2>哪些債的殖利率跨得過你的資金成本</h2>
+        <p id="heroSummary">載入中⋯</p>
+      </div>
+      <div class="chart chart--scatter" id="scatter"></div>
+      <p class="legend" id="scatterLegend"></p>
+    </section>
+
+    <!-- 排序結果 -->
+    <section class="panel">
+      <div class="panel__head panel__head--row">
+        <h2>候選債券</h2>
+        <label class="sortby">
+          排序
+          <select id="sortBy">
+            <option value="net">淨利差（高到低）</option>
+            <option value="ytm">到期殖利率</option>
+            <option value="years">剩餘年期（短到長）</option>
+            <option value="duration">存續期間（短到長）</option>
+            <option value="spread">買賣價差（小到大）</option>
+          </select>
+        </label>
+      </div>
+      <div class="tablewrap">
+        <table class="grid" id="resultTable">
+          <thead>
+            <tr>
+              <th scope="col">債券</th>
+              <th scope="col" class="num">票面</th>
+              <th scope="col">到期</th>
+              <th scope="col" class="num">年期</th>
+              <th scope="col" class="num">申購價</th>
+              <th scope="col" class="num">殖利率</th>
+              <th scope="col" class="num">淨利差</th>
+              <th scope="col" class="num">存續</th>
+              <th scope="col" class="num">價差</th>
+              <th scope="col">注意</th>
+            </tr>
+          </thead>
+          <tbody id="resultBody"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="emptyNote" hidden></p>
+    </section>
+
+    <!-- 個別債券分析 -->
+    <section class="panel panel--detail" id="detail" hidden>
+      <div class="panel__head panel__head--row">
+        <h2 id="detailName">—</h2>
+        <a id="detailDoc" href="#" target="_blank" rel="noopener" class="doclink">產品說明書</a>
+      </div>
+
+      <!-- 利差瀑布 -->
+      <div class="waterfall" id="waterfall"></div>
+
+      <!-- 關鍵數字 -->
+      <dl class="stats" id="stats"></dl>
+
+      <!-- 現金流 -->
+      <div class="subpanel">
+        <h3>每月現金流</h3>
+        <p class="sub">債息進帳對上貸款月付，中間的缺口要靠你自己的薪水補。</p>
+        <div class="chart chart--cash" id="cashflow"></div>
+        <p class="legend" id="cashLegend"></p>
+      </div>
+
+      <!-- 匯率敏感度 -->
+      <div class="subpanel">
+        <h3>匯率忍受度</h3>
+        <p class="sub">整段期間的總損益，隨外幣對台幣升貶如何變化。</p>
+        <div class="chart chart--fx" id="fxcurve"></div>
+        <p class="legend" id="fxLegend"></p>
+      </div>
+
+      <!-- 逐年明細 -->
+      <div class="subpanel">
+        <h3>逐年明細</h3>
+        <div class="tablewrap">
+          <table class="grid grid--compact" id="yearTable">
+            <thead><tr>
+              <th scope="col">年度</th>
+              <th scope="col" class="num">債息收入</th>
+              <th scope="col" class="num">貸款還款</th>
+              <th scope="col" class="num">當年淨額</th>
+              <th scope="col" class="num">累計淨額</th>
+            </tr></thead>
+            <tbody id="yearBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel panel--notes">
+      <h2>這個試算沒有告訴你的事</h2>
+      <ul class="notes">
+        <li><b>報價不是成交價。</b>玉山明確寫了實際成交價以交易確認單為準。這裡算出來的每一個數字都建立在參考報價上。</li>
+        <li><b>買賣價差是真實成本。</b>申購價和贖回價常差 2–4%。抱到期才拿得到算出來的殖利率，中途賣出先吃掉這段。</li>
+        <li><b>信用風險沒有被計價。</b>殖利率越高通常代表市場認為違約機率越高。RR5 的高收益債不是免費的午餐，發行機構倒了，本金就沒了。</li>
+        <li><b>匯率不會乖乖不動。</b>台幣兌美元一年走個 5% 很平常。看「匯率忍受度」那張圖，多數利差撐不過 5–10% 的匯率反向。</li>
+        <li><b>現金流會卡住。</b>貸款是每月還，債券是半年配息，中間的缺口得自己墊。本金更是要到債券到期才回來。</li>
+        <li><b>用借來的錢投資會放大兩邊。</b>賺的時候放大，賠的時候也放大，而且貸款照繳。</li>
+      </ul>
+      <p class="disclaimer">這是一個自用的計算工具，不是投資建議，作者也不是理財顧問。所有數字都可能有錯，決定前請自己驗算並諮詢專業人士。</p>
+    </section>
+
+  </div>
+</main>
+
+<footer class="foot">
+  <p>報價資料取自玉山銀行公開網頁，每個交易日自動更新。殖利率、存續期間、損益模擬均為本站自行計算。</p>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
