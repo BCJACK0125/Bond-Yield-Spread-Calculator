@@ -117,9 +117,14 @@ def fetch(url: str = URL, retries: int = 4) -> str:
     raise RuntimeError(f"連續 {retries} 次抓取失敗") from last_err
 
 
+def clean(text: str) -> str:
+    """把換行、不斷行空白、連續空白壓成單一半形空白。"""
+    return re.sub(r"\s+", " ", (text or "").replace("\xa0", " ")).strip()
+
+
 def split_price(cell: str) -> tuple[str, str]:
     """把 '90.46 (2026/09/24)' 拆成 ('90.46', '2026/09/24')。"""
-    cell = cell.replace("\xa0", " ").strip()
+    cell = clean(cell)
     if not cell or cell == "-":
         return "", ""
     m = PRICE_RE.search(cell)
@@ -144,6 +149,18 @@ def find_table(soup: BeautifulSoup):
     raise RuntimeError("找不到報價表格，網站結構可能已改版")
 
 
+def header_row_cells(table) -> list[str]:
+    """
+    只有表頭那一列整列都是 <th>；資料列的「是否開放申購」與「產品代碼」
+    也是用 <th> 包的，所以不能直接 table.find_all("th") 當表頭。
+    """
+    for tr in table.find_all("tr"):
+        tags = tr.find_all(["th", "td"], recursive=False)
+        if tags and all(tag.name == "th" for tag in tags):
+            return [clean(tag.get_text(" ", strip=True)) for tag in tags]
+    return []
+
+
 def align(cells: list[str], width: int) -> list[str] | None:
     """
     偶爾某些列會多出空白 <td>（例如標題列殘留），
@@ -163,8 +180,7 @@ def parse(html: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     table = find_table(soup)
 
-    header_cells = [th.get_text(strip=True) for th in table.find_all("th")]
-    headers = header_cells or EXPECTED_HEADERS
+    headers = header_row_cells(table) or EXPECTED_HEADERS
     if len(headers) != len(EXPECTED_HEADERS):
         print(
             f"[warn] 表頭欄數為 {len(headers)}（預期 {len(EXPECTED_HEADERS)}）："
@@ -179,10 +195,11 @@ def parse(html: str) -> list[dict]:
     skipped = 0
 
     for tr in body.find_all("tr"):
-        tds = tr.find_all("td")
-        if not tds:
-            continue  # 表頭列
-        cells = align([td.get_text(" ", strip=True) for td in tds], width)
+        # 資料列 th / td 混用，必須照原始順序一起取，否則欄位會整排錯位
+        tags = tr.find_all(["th", "td"], recursive=False)
+        if not any(tag.name == "td" for tag in tags):
+            continue  # 表頭列或空列
+        cells = align([clean(tag.get_text(" ", strip=True)) for tag in tags], width)
         if cells is None:
             skipped += 1
             continue
