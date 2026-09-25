@@ -15,15 +15,42 @@ const CCY_COLOR = {
 };
 const ccyColor = (c) => CCY_COLOR[c] || '#8D9AA7';
 
-/* 各幣別對台幣的粗略預設匯率，僅為了讓頁面一載入就能算。
-   使用者一定要自己改成實際牌告價。 */
+/* 各幣別對台幣的備援匯率。正常情況會被 data/fx.json（玉山牌告）蓋掉，
+   只有牌告抓不到時才會用到。使用者一定要自己改成實際換到的價格。 */
 const FX_DEFAULT = {
   USD: 32, EUR: 35, AUD: 21, CNY: 4.5, ZAR: 1.8, NZD: 19,
   SEK: 3.2, MXN: 1.7, JPY: 0.21, GBP: 41, CAD: 23,
 };
 
+/* 牌告匯率：回傳該幣別要帶進輸入框的預設值（fx.json 已取四個報價中最低者）。 */
+function fxQuote(ccy) {
+  return (state.fx && state.fx.rates && state.fx.rates[ccy]) || null;
+}
+
+function fxDefault(ccy) {
+  const q = fxQuote(ccy);
+  return (q && q.min) || FX_DEFAULT[ccy] || null;
+}
+
+/* 說明這個預設值是哪來的，順便提醒實際買外幣是用「即期賣出」那一邊。 */
+function renderFxHint(ccy) {
+  const el = $('fxSource');
+  if (!el) return;
+  const q = fxQuote(ccy);
+  if (!q) { el.textContent = ''; return; }
+
+  const pair = [];
+  if (q.spot_buy != null) pair.push(`即期 ${q.spot_buy} / ${q.spot_sell}`);
+  if (q.cash_buy != null) pair.push(`現金 ${q.cash_buy} / ${q.cash_sell}`);
+
+  const when = state.fx.quoted_at ? state.fx.quoted_at.slice(0, 16).replace('T', ' ') : '';
+  el.textContent = `玉山牌告 ${ccy}${when ? `（${when}）` : ''}　${pair.join('、')}（買入/賣出）。`
+    + `已帶入最低的 ${q.min}；真的要買外幣時銀行是用即期賣出 ${q.spot_sell}。`;
+}
+
 const state = {
   data: null,
+  fx: null,
   bonds: [],
   view: [],
   selected: null,
@@ -664,13 +691,21 @@ function renderDetail(inp, cost) {
 }
 
 function select(code) {
-  if (state.selected === code) { state.selected = null; render(); return; }
+  if (state.selected === code) {
+    // 取消選取後單位會回到 TWD/USD，匯率也要跟著回去，免得數字和單位對不上
+    state.selected = null;
+    const usd = fxDefault('USD');
+    if (usd) $('fxRate').value = usd;
+    render();
+    return;
+  }
 
-  // 換到不同幣別時，把該幣別的預設匯率帶進輸入框
+  // 換到不同幣別時，把該幣別的牌告匯率帶進輸入框
   const next = state.bonds.find((b) => b.code === code);
   const cur = state.bonds.find((b) => b.code === state.selected);
-  if (next && FX_DEFAULT[next.ccy] && (!cur || cur.ccy !== next.ccy)) {
-    $('fxRate').value = FX_DEFAULT[next.ccy];
+  if (next && (!cur || cur.ccy !== next.ccy)) {
+    const v = fxDefault(next.ccy);
+    if (v) $('fxRate').value = v;
   }
 
   state.selected = code;
@@ -689,9 +724,10 @@ function render() {
     `月付 <b>${money(pay)}</b> 元　實質年化資金成本 <b>${pct(cost * 100)}</b>`
     + (inp.repay === 'interest' ? `　到期另需還本 ${money(inp.amount)} 元` : '');
 
-  // 匯率單位隨選取債券調整
+  // 匯率單位與牌告說明隨選取債券調整
   const sel = state.bonds.find((b) => b.code === state.selected);
   $('fxUnit').textContent = 'TWD/' + (sel ? sel.ccy : 'USD');
+  renderFxHint(sel ? sel.ccy : 'USD');
 
   const over = state.view.filter((b) => b.ytm > cost * 100).length;
   $('heroSummary').textContent = state.view.length
@@ -760,7 +796,18 @@ async function boot() {
     return;
   }
 
+  // 牌告匯率是加分項，抓不到就沿用 FX_DEFAULT，不影響其他功能
+  try {
+    const fxRes = await fetch('data/fx.json', { cache: 'no-cache' });
+    if (fxRes.ok) state.fx = await fxRes.json();
+  } catch (err) {
+    state.fx = null;
+  }
+
   state.bonds = state.data.bonds;
+  const usd = fxDefault('USD');
+  if (usd) $('fxRate').value = usd;
+
   const d = new Date(state.data.generated_at);
   $('metaTime').textContent = isNaN(d) ? state.data.generated_at
     : `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;

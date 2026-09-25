@@ -66,7 +66,7 @@
           <span>換匯匯率</span>
           <span class="field__input"><input type="number" id="fxRate" value="32" step="0.01" min="0.01"><em id="fxUnit">TWD/USD</em></span>
         </label>
-        <p class="hint">預設值僅供試算，請改成你實際換匯的牌告價。<a href="https://www.esunbank.com/zh-tw/personal/deposit/rate/forex/foreign-exchange-rates" target="_blank" rel="noopener">查玉山牌告匯率</a></p>
+        <p class="hint"><span id="fxSource"></span>預設值僅供試算，請改成你實際換匯拿到的價格。<a href="https://www.esunbank.com/zh-tw/personal/deposit/rate/forex/foreign-exchange-rates" target="_blank" rel="noopener">查玉山牌告匯率</a></p>
         <label class="field">
           <span>換匯來回成本</span>
           <span class="field__input"><input type="number" id="fxCost" value="0.6" step="0.1" min="0"><em>%</em></span>
@@ -139,11 +139,11 @@
           <thead>
             <tr>
               <th scope="col">債券</th>
-              <th scope="col" class="num">票面</th>
+              <th scope="col" class="num" title="年化票面利率，零息債顯示「零息」">票面</th>
               <th scope="col">到期</th>
               <th scope="col" class="num">年期</th>
               <th scope="col" class="num">申購價</th>
-              <th scope="col" class="num">殖利率</th>
+              <th scope="col" class="num" title="到期殖利率（YTM）：用申購參考報價自行解出，假設抱到期">到期殖利率</th>
               <th scope="col" class="num">淨利差</th>
               <th scope="col" class="num">存續</th>
               <th scope="col" class="num">價差</th>

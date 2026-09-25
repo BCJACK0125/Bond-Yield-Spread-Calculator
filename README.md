@@ -19,15 +19,18 @@
 
 ```
 scrape.py                     爬蟲：抓報價、清洗欄位、產出 CSV 與 JSON
+fx.py                         爬蟲：抓玉山牌告匯率，供前端當換匯預設值
 analytics.py                  債券數學：YTM、存續期間、應計利息
 requirements.txt              Python 相依套件
 .github/workflows/scrape.yml  排程爬取 + 部署 Pages
 data/bonds_latest.csv         最新完整快照（進版控）
 data/price_history.csv        逐日累積的報價歷史（進版控）
+data/fx_latest.csv            當日牌告匯率快照（進版控）
 docs/index.html               網站
 docs/assets/styles.css
 docs/assets/app.js            利差模型、現金流模擬、SVG 繪圖
 docs/data/bonds.json          CI 產生，不進版控
+docs/data/fx.json             CI 產生，不進版控（牌告匯率）
 ```
 
 ## 部署
@@ -44,7 +47,8 @@ docs/data/bonds.json          CI 產生，不進版控
 
 ```bash
 pip install -r requirements.txt
-python scrape.py                  # 產生 docs/data/bonds.json
+python scrape.py                  # 產生 docs/data/bonds.json 與 fx.json
+python fx.py                      # 只想更新牌告匯率時
 python -m http.server -d docs 8000
 ```
 
@@ -79,6 +83,6 @@ NPV 曲線會有多個零點，只取區間兩端會漏掉有意義的那個解�
 
 ## 想再延伸
 
-- 匯率目前要手動輸入。可以在 `scrape.py` 加一段抓玉山牌告匯率，一起寫進 JSON。
+- 牌告匯率目前只帶「四個報價中最低的那個」當預設值，可以改成讓使用者在即期 / 現金之間切換。
 - 每檔債的走勢圖頁 `…/price/chart?bondid=XXXX` 可能有歷史報價 API，值得挖。
 - 想收通知的話，在 `main()` 比對前一天的 `bonds_latest.csv`，淨利差變動超過門檻就打 webhook。

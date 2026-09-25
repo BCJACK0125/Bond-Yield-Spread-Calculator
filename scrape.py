@@ -27,6 +27,7 @@ import requests
 from bs4 import BeautifulSoup
 
 import analytics
+import fx
 
 URL = "https://wealth.esunbank.com/zh-tw/offshore-bond/price"
 ORIGIN = "https://wealth.esunbank.com"
@@ -343,6 +344,13 @@ def main() -> int:
     write_latest(rows)
     append_history(rows)
     write_site_json(rows)
+
+    # 牌告匯率只是前端預設值，抓不到不該讓整個更新失敗
+    try:
+        fx.run()
+    except Exception as err:  # noqa: BLE001
+        print(f"[warn] 牌告匯率抓取失敗，前端沿用內建預設值：{err}", file=sys.stderr)
+
     return 0
 
 
