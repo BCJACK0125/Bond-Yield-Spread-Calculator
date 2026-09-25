@@ -22,30 +22,46 @@ const FX_DEFAULT = {
   SEK: 3.2, MXN: 1.7, JPY: 0.21, GBP: 41, CAD: 23,
 };
 
-/* 牌告匯率：回傳該幣別要帶進輸入框的預設值（fx.json 已取四個報價中最低者）。 */
+/* 牌告匯率。模型買進用 fxRate*(1+fxCost/2)、換回用 fxRate*(1-fxCost/2)，
+   所以匯率欄要填即期中價、成本欄填買賣價差，兩腿才會剛好落在
+   「銀行賣出」（你買外幣）和「銀行買入」（你換回台幣）上。 */
 function fxQuote(ccy) {
   return (state.fx && state.fx.rates && state.fx.rates[ccy]) || null;
 }
 
 function fxDefault(ccy) {
   const q = fxQuote(ccy);
-  return (q && q.min) || FX_DEFAULT[ccy] || null;
+  return (q && q.mid) || FX_DEFAULT[ccy] || null;
 }
 
-/* 說明這個預設值是哪來的，順便提醒實際買外幣是用「即期賣出」那一邊。 */
+function fxSpread(ccy) {
+  const q = fxQuote(ccy);
+  return q && q.spread_pct != null ? q.spread_pct : null;
+}
+
+/* 把某幣別的牌告帶進兩個輸入框。 */
+function applyFxQuote(ccy) {
+  const mid = fxDefault(ccy);
+  if (mid) $('fxRate').value = mid;
+  const spread = fxSpread(ccy);
+  if (spread != null) $('fxCost').value = +spread.toFixed(2);
+}
+
+/* 說明這組預設值是哪來的、換算回去實際是用哪一邊的牌告價。 */
 function renderFxHint(ccy) {
   const el = $('fxSource');
   if (!el) return;
   const q = fxQuote(ccy);
   if (!q) { el.textContent = ''; return; }
 
-  const pair = [];
-  if (q.spot_buy != null) pair.push(`即期 ${q.spot_buy} / ${q.spot_sell}`);
-  if (q.cash_buy != null) pair.push(`現金 ${q.cash_buy} / ${q.cash_sell}`);
-
   const when = state.fx.quoted_at ? state.fx.quoted_at.slice(0, 16).replace('T', ' ') : '';
-  el.textContent = `玉山牌告 ${ccy}${when ? `（${when}）` : ''}　${pair.join('、')}（買入/賣出）。`
-    + `已帶入最低的 ${q.min}；真的要買外幣時銀行是用即期賣出 ${q.spot_sell}。`;
+  const kind = q.basis === 'cash' ? '現金' : '即期';
+  const sell = q.basis === 'cash' ? q.cash_sell : q.spot_sell;
+  const buy = q.basis === 'cash' ? q.cash_buy : q.spot_buy;
+
+  el.textContent = `玉山${kind}牌告 ${ccy}${when ? `（${when}）` : ''}：`
+    + `你買外幣用銀行賣出 ${sell}，換回台幣用銀行買入 ${buy}，來回價差 ${q.spread_pct}%。`
+    + `已帶入中價 ${q.mid} 與該價差，試算的兩腿就等於這兩個牌告價。`;
 }
 
 const state = {
@@ -692,21 +708,17 @@ function renderDetail(inp, cost) {
 
 function select(code) {
   if (state.selected === code) {
-    // 取消選取後單位會回到 TWD/USD，匯率也要跟著回去，免得數字和單位對不上
+    // 取消選取後單位會回到 TWD/USD，牌告也要跟著回去，免得數字和單位對不上
     state.selected = null;
-    const usd = fxDefault('USD');
-    if (usd) $('fxRate').value = usd;
+    applyFxQuote('USD');
     render();
     return;
   }
 
-  // 換到不同幣別時，把該幣別的牌告匯率帶進輸入框
+  // 換到不同幣別時，把該幣別的牌告中價與買賣價差帶進輸入框
   const next = state.bonds.find((b) => b.code === code);
   const cur = state.bonds.find((b) => b.code === state.selected);
-  if (next && (!cur || cur.ccy !== next.ccy)) {
-    const v = fxDefault(next.ccy);
-    if (v) $('fxRate').value = v;
-  }
+  if (next && (!cur || cur.ccy !== next.ccy)) applyFxQuote(next.ccy);
 
   state.selected = code;
   render();
@@ -805,8 +817,7 @@ async function boot() {
   }
 
   state.bonds = state.data.bonds;
-  const usd = fxDefault('USD');
-  if (usd) $('fxRate').value = usd;
+  applyFxQuote('USD');
 
   const d = new Date(state.data.generated_at);
   $('metaTime').textContent = isNaN(d) ? state.data.generated_at

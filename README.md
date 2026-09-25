@@ -19,7 +19,7 @@
 
 ```
 scrape.py                     爬蟲：抓報價、清洗欄位、產出 CSV 與 JSON
-fx.py                         爬蟲：抓玉山牌告匯率，供前端當換匯預設值
+fx.py                         爬蟲：抓玉山牌告匯率，供前端當換匯與價差預設值
 analytics.py                  債券數學：YTM、存續期間、應計利息
 requirements.txt              Python 相依套件
 .github/workflows/scrape.yml  排程爬取 + 部署 Pages
@@ -83,6 +83,6 @@ NPV 曲線會有多個零點，只取區間兩端會漏掉有意義的那個解�
 
 ## 想再延伸
 
-- 牌告匯率目前只帶「四個報價中最低的那個」當預設值，可以改成讓使用者在即期 / 現金之間切換。
+- 牌告的「網銀/App 優惠」欄（加減碼）目前沒收，抓取時多半是「-」。有值的話可以用來壓低價差預設值。
 - 每檔債的走勢圖頁 `…/price/chart?bondid=XXXX` 可能有歷史報價 API，值得挖。
 - 想收通知的話，在 `main()` 比對前一天的 `bonds_latest.csv`，淨利差變動超過門檻就打 webhook。

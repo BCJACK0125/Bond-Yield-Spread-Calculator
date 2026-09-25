@@ -50,8 +50,12 @@ SITE_JSON = ROOT / "docs" / "data" / "fx.json"
 # 牌告幣別目前 15 種，少於這個數就當網站改版
 MIN_CCY = 10
 
-# 前端預設值的取法：四個報價裡最低的那個
-DEFAULT_BASIS = "min"
+# 前端預設值的取法：即期中價 + 買賣價差。
+#
+# 試算模型買進用 mid*(1+spread/2)、換回用 mid*(1-spread/2)，
+# 餵中價和價差進去，這兩腿就剛好等於「銀行賣出」和「銀行買入」，
+# 也就是你實際換匯會拿到的價。直接把賣出價當 mid 會把價差算兩次。
+DEFAULT_BASIS = "spot_mid"
 
 RATE_FIELDS = {
     "spot_buy": "BBoardRate",
@@ -68,7 +72,8 @@ CSV_FIELDS = [
     "即期賣出",
     "現金買入",
     "現金賣出",
-    "預設匯率",
+    "即期中價",
+    "來回價差",
 ]
 
 CCY_RE = re.compile(r"^[A-Z]{3}$")
@@ -131,10 +136,16 @@ def parse(html: str) -> tuple[dict[str, dict], str]:
             node = tr.find(class_=cls)
             row[key] = to_float(node.get_text(" ", strip=True) if node else None)
 
-        quotes = [v for v in row.values() if v is not None and v > 0]
-        if not quotes:
+        # 買債券是帳戶轉匯，走即期；現金價只有換鈔票才用得到，當備援
+        buy = row["spot_buy"] if row["spot_buy"] else row["cash_buy"]
+        sell = row["spot_sell"] if row["spot_sell"] else row["cash_sell"]
+        if not buy or not sell or sell <= 0 or buy <= 0:
             continue
-        row["min"] = min(quotes)
+
+        mid = (buy + sell) / 2
+        row["basis"] = "spot" if row["spot_buy"] else "cash"
+        row["mid"] = round(mid, 4)
+        row["spread_pct"] = round((sell - buy) / mid * 100, 3)
         rates[ccy] = row
 
     if len(rates) < MIN_CCY:
@@ -176,12 +187,13 @@ def write_files(rates: dict[str, dict], quoted: str) -> None:
                     "即期賣出": r["spot_sell"] if r["spot_sell"] is not None else "",
                     "現金買入": r["cash_buy"] if r["cash_buy"] is not None else "",
                     "現金賣出": r["cash_sell"] if r["cash_sell"] is not None else "",
-                    "預設匯率": r["min"],
+                    "即期中價": r["mid"],
+                    "來回價差": r["spread_pct"],
                 }
             )
 
     print(f"[ok] 寫入 {SITE_JSON.relative_to(ROOT)} 與 {LATEST_CSV.relative_to(ROOT)}：{len(rates)} 種幣別")
-    print(f"      牌告時間 {quoted or '（頁面沒給）'}，預設值取四個報價中最低者")
+    print(f"      牌告時間 {quoted or '（頁面沒給）'}，預設值＝即期中價，換匯成本＝買賣價差")
 
 
 def run() -> dict[str, dict]:
